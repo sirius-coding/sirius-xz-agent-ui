@@ -30,12 +30,18 @@ async function readResponseBody(response: Response): Promise<unknown> {
 }
 
 export async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
+  const { headers: initHeaders, ...restInit } = init ?? {};
+  const hasBody = init?.body !== undefined && init?.body !== null;
+  const method = (restInit.method ?? 'GET').toUpperCase();
+  const headers = new Headers(initHeaders ?? {});
+
+  if (hasBody && !headers.has('Content-Type') && method !== 'GET' && method !== 'HEAD') {
+    headers.set('Content-Type', 'application/json');
+  }
+
   const response = await fetch(withApiBase(path), {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers ?? {})
-    },
-    ...init
+    ...restInit,
+    headers
   });
 
   if (!response.ok) {
