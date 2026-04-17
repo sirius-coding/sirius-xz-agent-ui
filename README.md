@@ -44,4 +44,4 @@ npm run dev
 
 正式设计文档位于：
 
-- `docs/superpowers/specs/2026-04-17-sirius-xz-agent-ui-design.md`
+- `docs/sirius-xz-agent-ui-design.md`

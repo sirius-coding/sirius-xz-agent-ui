@@ -3,17 +3,16 @@ import { getAgentSummary, askAgent } from './api/agent';
 import { getBackendHealth } from './api/health';
 import { getDocument, listDocuments, upsertDocument } from './api/knowledge';
 import { mockAgentSummary, mockBackendHealth, mockListDocuments } from './data/mock';
-import { ApiInspector } from './components/ApiInspector';
-import { ChatPanel } from './components/ChatPanel';
-import { DocumentEditor } from './components/DocumentEditor';
-import { DocumentList } from './components/DocumentList';
+import { ApiPage } from './pages/ApiPage';
+import { ChatPage } from './pages/ChatPage';
+import { KnowledgePage } from './pages/KnowledgePage';
+import { OverviewPage } from './pages/OverviewPage';
+import { SideNav } from './components/SideNav';
 import { MetricCard } from './components/MetricCard';
-import { SectionCard } from './components/SectionCard';
 import { StatusPill } from './components/StatusPill';
-import { TabBar } from './components/TabBar';
 import type { AgentAnswer, AgentSummary, BackendHealth, DocumentInput, KnowledgeDocument } from './types/api';
 
-type TabKey = 'overview' | 'chat' | 'knowledge' | 'api';
+type PageKey = 'overview' | 'chat' | 'knowledge' | 'api';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'relative proxy';
 
@@ -25,7 +24,7 @@ const emptyDocument = (): DocumentInput => ({
 });
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<TabKey>('overview');
+  const [activePage, setActivePage] = useState<PageKey>(() => readPageFromHash());
   const [summary, setSummary] = useState<AgentSummary | null>(null);
   const [documents, setDocuments] = useState<KnowledgeDocument[]>([]);
   const [selectedDocumentId, setSelectedDocumentId] = useState<string>('');
@@ -44,6 +43,15 @@ export default function App() {
     () => documents.find((document) => document.id === selectedDocumentId) ?? null,
     [documents, selectedDocumentId]
   );
+
+  useEffect(() => {
+    const syncHash = () => setActivePage(readPageFromHash());
+    window.addEventListener('hashchange', syncHash);
+    if (!window.location.hash) {
+      window.location.hash = 'overview';
+    }
+    return () => window.removeEventListener('hashchange', syncHash);
+  }, []);
 
   useEffect(() => {
     void bootstrap();
@@ -106,7 +114,7 @@ export default function App() {
       setError(null);
       const nextAnswer = await askAgent(trimmed);
       setAnswer(nextAnswer);
-      setActiveTab('chat');
+      navigateTo('chat');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '问答失败');
     } finally {
@@ -141,7 +149,7 @@ export default function App() {
       setLastSyncedAt(new Date());
       setSelectedDocumentId(saved.id);
       setEditorValue(saved);
-      setActiveTab('knowledge');
+      navigateTo('knowledge');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '保存文档失败');
     } finally {
@@ -189,7 +197,7 @@ export default function App() {
     ? String((health.details as Record<string, unknown>).mode)
     : 'live';
   const healthTone = health?.status === 'UP' ? 'success' : health?.status === 'DOWN' ? 'danger' : 'warning';
-  const tabCounts = {
+  const counts = {
     overview: 2,
     chat: answer ? 1 : 0,
     knowledge: documentCount,
@@ -213,132 +221,118 @@ export default function App() {
         </div>
         <div className="hero__stats">
           <MetricCard label="Documents" value={String(documentCount)} hint="knowledge base entries" />
-          <MetricCard label="Backend" value={health?.status ?? 'UNKNOWN'} hint={JSON.stringify(health?.details ?? {}, null, 0)} accent="violet" />
+          <MetricCard
+            label="Backend"
+            value={health?.status ?? 'UNKNOWN'}
+            hint={JSON.stringify(health?.details ?? {}, null, 0)}
+            accent="violet"
+          />
           <MetricCard label="Mode" value={summary?.position ?? 'Console'} hint={summary?.name ?? 'Sirius'} accent="teal" />
         </div>
       </header>
 
-      <div className="toolbar">
-        <div className="toolbar__meta">
-          <StatusPill tone={healthTone}>{runtimeLabel === 'mock' ? 'Mock Fallback' : 'Live Backend'}</StatusPill>
-          <span>{documentCount} documents</span>
-          <span>{answer ? 'Answer ready' : 'No answer yet'}</span>
-        </div>
-        <button className="button" type="button" onClick={() => void bootstrap()} disabled={loading}>
-          {loading ? '同步中...' : 'Refresh workspace'}
-        </button>
-      </div>
-
-      <TabBar active={activeTab} onChange={(tab) => setActiveTab(tab)} counts={tabCounts} />
-
       {error ? <div className="notice notice--error">{error}</div> : null}
 
-      <main className="content-grid">
-        {activeTab === 'overview' ? (
-          <>
-            <SectionCard title="Agent Summary" description="从后端接口直接读取的 Agent 信息。">
-              {loading && !summary ? (
-                <div className="empty-state">Loading summary...</div>
-              ) : (
-                <>
-                  <div className="summary-grid">
-                    <MetricCard label="Name" value={summary?.name ?? 'Sirius'} hint="agent identity" />
-                    <MetricCard label="Position" value={summary?.position ?? 'Unknown'} hint="role" />
-                    <MetricCard label="Focus" value={String(topFocus.length)} hint={topFocus.join(' · ')} accent="violet" />
-                  </div>
-                  <div className="status-panel">
-                    {topFocus.map((item) => (
-                      <StatusPill key={item} tone="neutral">
-                        {item}
-                      </StatusPill>
-                    ))}
-                  </div>
-                </>
-              )}
-            </SectionCard>
+      <div className="workspace">
+        <SideNav
+          activePage={activePage}
+          counts={counts}
+          lastSyncedAt={lastSyncedAt ? formatTimestamp(lastSyncedAt) : 'pending'}
+          runtimeLabel={runtimeLabel === 'mock' ? 'Mock Fallback' : 'Live Backend'}
+          onNavigate={navigateTo}
+        />
 
-            <SectionCard
-              title="System Snapshot"
-              description="把运行态、接口态和知识库态集中放在一个可视化区域。"
-            >
-              <div className="snapshot-grid">
-                <div className="snapshot-card">
-                  <span className="muted-label">Runtime</span>
-                  <strong>{runtimeLabel}</strong>
-                  <p>{health?.status === 'UP' ? 'Backend endpoint is reachable.' : 'UI is running with local fallback.'}</p>
-                </div>
-                <div className="snapshot-card">
-                  <span className="muted-label">Last Sync</span>
-                  <strong>{lastSyncedAt ? formatTimestamp(lastSyncedAt) : 'Pending'}</strong>
-                  <p>Bootstrap, health refresh, or knowledge save will update this timestamp.</p>
-                </div>
-                <div className="snapshot-card">
-                  <span className="muted-label">Selection</span>
-                  <strong>{selectedDocument?.title ?? 'None'}</strong>
-                  <p>{selectedDocument?.id ?? 'Select a document to inspect and edit it.'}</p>
-                </div>
-              </div>
-              <div className="summary-grid summary-grid--compact">
-                <MetricCard label="Documents" value={String(documentCount)} hint="stored knowledge docs" />
-                <MetricCard label="Health" value={health?.status ?? 'UNKNOWN'} hint="backend availability" accent="violet" />
-              </div>
-            </SectionCard>
-          </>
-        ) : null}
+        <main className="page-stage">
+          <div className="page-head">
+            <div>
+              <span className="muted-label">Current Page</span>
+              <h2>{pageMeta[activePage].title}</h2>
+              <p>{pageMeta[activePage].description}</p>
+            </div>
+            <button className="button" type="button" onClick={() => void bootstrap()} disabled={loading}>
+              {loading ? '同步中...' : 'Refresh workspace'}
+            </button>
+          </div>
 
-        {activeTab === 'chat' ? (
-          <SectionCard title="Ask the Agent" description="输入问题后查看结构化回答、来源和命中词。">
-            <ChatPanel
+          {activePage === 'overview' ? (
+            <OverviewPage
+              summary={summary}
+              documentCount={documentCount}
+              selectedDocument={selectedDocument}
+              topFocus={topFocus}
+              health={health}
+              lastSyncedAt={lastSyncedAt ? formatTimestamp(lastSyncedAt) : 'pending'}
+              loading={loading}
+            />
+          ) : null}
+
+          {activePage === 'chat' ? (
+            <ChatPage
               question={question}
               onQuestionChange={setQuestion}
               onSubmit={() => void handleAsk()}
               isSubmitting={asking}
               answer={answer}
               error={error}
-              promptHint="优先问与系统设计、知识库内容、接口行为相关的问题，便于验证当前后端能力。"
             />
-          </SectionCard>
-        ) : null}
+          ) : null}
 
-        {activeTab === 'knowledge' ? (
-          <div className="knowledge-layout">
-            <SectionCard title="Document List" description="选择一个文档查看并编辑。">
-              {documents.length > 0 ? (
-                <DocumentList
-                  documents={documents}
-                  selectedId={selectedDocumentId}
-                  onSelect={(document) => void handleDocumentSelect(document)}
-                />
-              ) : (
-                <div className="empty-state">No knowledge documents found.</div>
-              )}
-            </SectionCard>
+          {activePage === 'knowledge' ? (
+            <KnowledgePage
+              documents={documents}
+              selectedDocumentId={selectedDocumentId}
+              editorValue={editorValue}
+              onSelect={(document) => void handleDocumentSelect(document)}
+              onChange={setEditorValue}
+              onSave={() => void handleSaveDocument()}
+              isSaving={savingDocument}
+            />
+          ) : null}
 
-            <SectionCard title="Document Editor" description="用于创建或更新知识文档。">
-              <DocumentEditor
-                value={editorValue}
-                onChange={setEditorValue}
-                onSave={() => void handleSaveDocument()}
-                isSaving={savingDocument}
-              />
-            </SectionCard>
-          </div>
-        ) : null}
-
-        {activeTab === 'api' ? (
-          <SectionCard title="API Inspector" description="查看接口状态和代理配置。">
-            <ApiInspector
+          {activePage === 'api' ? (
+            <ApiPage
               apiBaseUrl={API_BASE_URL}
               health={health}
               onRefresh={() => void handleRefreshHealth()}
               isRefreshing={refreshingHealth}
             />
-          </SectionCard>
-        ) : null}
-      </main>
+          ) : null}
+        </main>
+      </div>
     </div>
   );
 }
+
+function readPageFromHash(): PageKey {
+  const hash = window.location.hash.replace(/^#/, '');
+  if (hash === 'chat' || hash === 'knowledge' || hash === 'api' || hash === 'overview') {
+    return hash;
+  }
+  return 'overview';
+}
+
+function navigateTo(page: PageKey) {
+  window.location.hash = page;
+}
+
+const pageMeta: Record<PageKey, { title: string; description: string }> = {
+  overview: {
+    title: 'Overview',
+    description: 'Agent summary, runtime metadata, and knowledge snapshot.'
+  },
+  chat: {
+    title: 'Chat',
+    description: 'Ask the agent and inspect structured retrieval answers.'
+  },
+  knowledge: {
+    title: 'Knowledge',
+    description: 'Browse and edit knowledge documents.'
+  },
+  api: {
+    title: 'API Lab',
+    description: 'Inspect backend health and endpoint wiring.'
+  }
+};
 
 function createDocumentId(title: string): string {
   return title
