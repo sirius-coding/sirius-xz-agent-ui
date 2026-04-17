@@ -13,16 +13,36 @@ export class ApiError extends Error {
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
 
 export function withApiBase(path: string): string {
-  if (!API_BASE_URL) {
+  if (/^https?:\/\//i.test(path)) {
     return path;
   }
 
-  return `${API_BASE_URL.replace(/\/$/, '')}${path}`;
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  const bypassBasePrefix = normalizedPath === '/actuator' || normalizedPath.startsWith('/actuator/');
+
+  if (bypassBasePrefix) {
+    return normalizedPath;
+  }
+
+  if (!API_BASE_URL) {
+    return normalizedPath;
+  }
+
+  const normalizedBase = API_BASE_URL.replace(/\/+$/, '');
+  const dedupeApiPrefix =
+    normalizedBase.endsWith('/api') &&
+    (normalizedPath === '/api' || normalizedPath.startsWith('/api/'));
+
+  if (dedupeApiPrefix) {
+    return `${normalizedBase}${normalizedPath.slice(4)}`;
+  }
+
+  return `${normalizedBase}${normalizedPath}`;
 }
 
 async function readResponseBody(response: Response): Promise<unknown> {
-  const contentType = response.headers.get('content-type') ?? '';
-  if (contentType.includes('application/json')) {
+  const contentType = (response.headers.get('content-type') ?? '').toLowerCase();
+  if (contentType.includes('json')) {
     return response.json();
   }
 
