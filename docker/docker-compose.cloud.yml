@@ -4,8 +4,7 @@ services:
       context: ..
       dockerfile: Dockerfile.cloud
       args:
-        VITE_API_BASE_URL: http://223.109.140.60:26000
+        VITE_API_BASE_URL: /api
     container_name: sirius-xz-agent-ui
     restart: unless-stopped
-    ports:
-      - "26100:26100"
+    network_mode: host
