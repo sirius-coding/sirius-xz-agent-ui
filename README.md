@@ -40,6 +40,22 @@ npm run dev
 
 - `VITE_API_BASE_URL`：后端基础地址，默认使用相对路径
 
+## 云服务器部署
+
+前端可通过 Docker Compose 在云服务器上运行，构建时将 API 指向云上后端：
+
+```bash
+docker compose -f docker/docker-compose.cloud.yml up -d --build
+```
+
+对外端口：
+
+- `26100/tcp`：前端 UI
+
+默认构建参数会把前端请求指向：
+
+- `http://<private-host-or-ip>:26000`
+
 ## 设计说明
 
 正式设计文档位于：
