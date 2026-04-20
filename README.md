@@ -61,3 +61,9 @@ docker compose -f docker/docker-compose.cloud.yml up -d --build
 正式设计文档位于：
 
 - `docs/sirius-xz-agent-ui-design.md`
+
+## Workspace alignment
+
+This project is the frontend execution layer for the Sirius Agent/RAG sample. It keeps UI workflows, API client behavior, mock fallback behavior, and frontend deployment details inside the project. Reusable lessons about API proxying, public-safe deployment notes, and repo publication should be promoted back to the root workspace docs and skills.
+
+License: Apache-2.0 under this project `LICENSE` unless a file states otherwise.
