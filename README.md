@@ -54,7 +54,7 @@ docker compose -f docker/docker-compose.cloud.yml up -d --build
 
 默认构建参数会把前端请求指向：
 
-- `http://<private-host-or-ip>:26000`
+- `http://<backend-host>:<backend-port>`
 
 ## 设计说明
 
